@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blockchain E-Voting System</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 transition-colors duration-200">
+    <div id="app" class="min-h-screen">
+        <!-- Navigation -->
+        <nav class="bg-white dark:bg-gray-800 shadow-lg">
+            <div class="max-w-7xl mx-auto px-4">
+                <div class="flex justify-between items-center py-4">
+                    <div class="flex items-center">
+                        <i class="bi bi-check-square-fill text-2xl text-blue-600 mr-2"></i>
+                        <h1 class="text-xl font-bold text-gray-800 dark:text-white">E-Voting System</h1>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <button id="connectWallet" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+                            Connect Wallet
+                        </button>
+                        <button id="darkModeToggle" class="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700">
+                            <i class="bi bi-moon-fill dark:text-white"></i>
+                        </button>
+                        <select id="languageSelect" class="bg-white dark:bg-gray-800 border rounded-lg px-2 py-1 dark:text-white">
+                            <option value="en">English</option>
+                            <option value="hi">हिंदी</option>
+                            <option value="es">Español</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <div class="max-w-7xl mx-auto px-4 py-8">
+            <!-- Admin Panel -->
+            <div id="adminPanel" class="hidden mb-8">
+                <h2 class="text-2xl font-bold mb-4 dark:text-white">Admin Panel</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Create Election -->
+                    <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
+                        <h3 class="text-lg font-semibold mb-4 dark:text-white">Create Election</h3>
+                        <form id="createElectionForm" class="space-y-4">
+                            <div>
+                                <input type="text" id="electionName" placeholder="Election Name" class="w-full p-2 border rounded dark:bg-gray-700 dark:text-white">
+                            </div>
+                            <div>
+                                <textarea id="electionDescription" placeholder="Description" class="w-full p-2 border rounded dark:bg-gray-700 dark:text-white"></textarea>
+                            </div>
+                            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                                Create Election
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Register Candidate -->
+                    <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
+                        <h3 class="text-lg font-semibold mb-4 dark:text-white">Register Candidate</h3>
+                        <form id="registerCandidateForm" class="space-y-4">
+                            <div>
+                                <input type="number" id="candidateElectionId" placeholder="Election ID" class="w-full p-2 border rounded dark:bg-gray-700 dark:text-white">
+                            </div>
+                            <div>
+                                <input type="text" id="candidateName" placeholder="Candidate Name" class="w-full p-2 border rounded dark:bg-gray-700 dark:text-white">
+                            </div>
+                            <div>
+                                <input type="text" id="candidateParty" placeholder="Party Name" class="w-full p-2 border rounded dark:bg-gray-700 dark:text-white">
+                            </div>
+                            <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                                Register Candidate
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Voter Panel -->
+            <div id="voterPanel" class="mb-8">
+                <h2 class="text-2xl font-bold mb-4 dark:text-white">Active Elections</h2>
+                <div id="activeElections" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <!-- Active elections will be populated here -->
+                </div>
+            </div>
+
+            <!-- Results Panel -->
+            <div id="resultsPanel" class="mb-8">
+                <h2 class="text-2xl font-bold mb-4 dark:text-white">Election Results</h2>
+                <div id="electionResults" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <!-- Results will be populated here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Overlay -->
+        <div id="loadingOverlay" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center">
+            <div class="bg-white p-6 rounded-lg shadow-lg">
+                <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                <p class="mt-4 text-center">Processing Transaction...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Contract ABI and address
+        const contractAddress = '0x2e6E3e009a3bd8aFa764cB746547a33C61Dc73ae';
+        const contractABI = [/* Your ABI here */];
+
+        // Global variables
+        let provider;
+        let signer;
+        let contract;
+        let currentAccount;
+
+        // Initialize Web3
+        async function initWeb3() {
+            try {
+                if (window.ethereum) {
+                    provider = new ethers.providers.Web3Provider(window.ethereum);
+                    await provider.send("eth_requestAccounts", []);
+                    signer = provider.getSigner();
+                    contract = new ethers.Contract(contractAddress, contractABI, signer);
+                    currentAccount = await signer.getAddress();
+                    
+                    // Update UI
+                    document.getElementById('connectWallet').textContent = `Connected: ${currentAccount.substring(0,6)}...${currentAccount.substring(38)}`;
+                    
+                    // Check if user is admin
+                    const admin = await contract.admin();
+                    if (admin.toLowerCase() === currentAccount.toLowerCase()) {
+                        document.getElementById('adminPanel').classList.remove('hidden');
+                    }
+
+                    // Subscribe to network changes
+                    window.ethereum.on('chainChanged', handleChainChanged);
+                    window.ethereum.on('accountsChanged', handleAccountsChanged);
+
+                    // Load initial data
+                    await loadActiveElections();
+                    await loadResults();
+                } else {
+                    alert('Please install MetaMask to use this application');
+                }
+            } catch (error) {
+                console.error('Error initializing Web3:', error);
+                alert('Failed to connect to blockchain network');
+            }
+        }
+
+        // Handle chain changes
+        function handleChainChanged(chainId) {
+            window.location.reload();
+        }
+
+        // Handle account changes
+        function handleAccountsChanged(accounts) {
+            if (accounts.length === 0) {
+                // MetaMask is locked or user has no accounts
+                currentAccount = null;
+                document.getElementById('connectWallet').textContent = 'Connect Wallet';
+                document.getElementById('adminPanel').classList.add('hidden');
+            } else if (accounts[0] !== currentAccount) {
+                currentAccount = accounts[0];
+                initWeb3();
+            }
+        }
+
+        // Create Election
+        document.getElementById('createElectionForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('electionName').value;
+            const description = document.getElementById('electionDescription').value;
+
+            try {
+                showLoading();
+                const tx = await contract.createElection(name, description);
+                await tx.wait();
+                alert('Election created successfully!');
+                await loadActiveElections();
+            } catch (error) {
+                console.error('Error creating election:', error);
+                alert('Failed to create election');
+            } finally {
+                hideLoading();
+            }
+        });
+
+        // Register Candidate
+        document.getElementById('registerCandidateForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const electionId = document.getElementById('candidateElectionId').value;
+            const name = document.getElementById('candidateName').value;
+            const party = document.getElementById('candidateParty').value;
+
+            try {
+                showLoading();
+                const tx = await contract.registerCandidate(electionId, name, party);
+                await tx.wait();
+                alert('Candidate registered successfully!');
+            } catch (error) {
+                console.error('Error registering candidate:', error);
+                alert('Failed to register candidate');
+            } finally {
+                hideLoading();
+            }
+        });
+
+        // Load Active Elections
+        async function loadActiveElections() {
+            try {
+                const electionCount = await contract.electionCount();
+                const activeElectionsDiv = document.getElementById('activeElections');
+                activeElectionsDiv.innerHTML = '';
+
+                for (let i = 1; i <= electionCount; i++) {
+                    const election = await contract.elections(i);
+                    if (election.isActive && !election.isEnded) {
+                        const electionCard = createElectionCard(election);
+                        activeElectionsDiv.appendChild(electionCard);
+                    }
+                }
+            } catch (error) {
+                console.error('Error loading active elections:', error);
+            }
+        }
+
+        // Create Election Card
+        function createElectionCard(election) {
+            const div = document.createElement('div');
+            div.className = 'bg-white dark:bg-gray-800 p-6 rounded-lg shadow';
+            div.innerHTML = `
+                <h3 class="text-lg font-semibold mb-2 dark:text-white">${election.name}</h3>
+                <p class="text-gray-600 dark:text-gray-400 mb-4">${election.description}</p>
+                <button onclick="vote(${election.id})" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                    Vote
+                </button>
+            `;
+            return div;
+        }
+
+        // Vote Function
+        async function vote(electionId) {
+            try {
+                const candidateId = prompt('Enter Candidate ID:');
+                if (!candidateId) return;
+
+                showLoading();
+                const tx = await contract.vote(electionId, candidateId);
+                await tx.wait();
+                alert('Vote cast successfully!');
+                await loadActiveElections();
+            } catch (error) {
+                console.error('Error casting vote:', error);
+                alert('Failed to cast vote');
+            } finally {
+                hideLoading();
+            }
+        }
+
+        // Loading State Management
+        function showLoading() {
+            document.getElementById('loadingOverlay').classList.remove('hidden');
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingOverlay').classList.add('hidden');
+        }
+
+        // Dark Mode Toggle
+        document.getElementById('darkModeToggle').addEventListener('click', () => {
+            document.documentElement.classList.toggle('dark');
+        });
+
+        // Initialize the application
+        document.getElementById('connectWallet').addEventListener('click', initWeb3);
+    </script>
+<script>document.body.addEventListener('wheel', e => { if (!e.ctrlKey) return; e.preventDefault(); return }, { passive: false })</script>
+	</body>
+</html>
